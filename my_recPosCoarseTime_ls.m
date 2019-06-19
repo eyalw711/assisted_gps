@@ -1,5 +1,5 @@
 function state = my_recPosCoarseTime_ls(... % old return values are [pos, El, GDOP, basic_obs]
-    obs, sats, Eph, TOW_assist_ms, rec_loc_assist)
+    obs, sats, Eph, TOW_assist_ms, rec_loc_assist, dgln)
 % MY_RECPOSCOARSETIME_LS Computation of receiver position from fractional
 %          pseudoranges using coarse time navigation and least squares
 
@@ -46,6 +46,9 @@ approx_distances = sqrt(sum((repmat(rec_loc_assist, 1, numSVs) - satPos_at_T_til
 
 % now find K numbers:
 Ks = arrayfun(@(x) x - Ns(N0_inx), Ns);
+if dgln
+    Ks = zeros(size(Ks));
+end
 
 fullPRs = Ns + obs; % full pseudoranges reconstruction in ms
 fullPRs = fullPRs * (v_light * 1e-3); % in meters
