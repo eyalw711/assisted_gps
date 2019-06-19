@@ -1,6 +1,9 @@
 %clear all;
 % rng(777);
 % file_idx = 2;
+tm = datestr(now,'dd_mm_yyyy__HH_MM_SS');
+mkdir('results', tm);
+
 N_trials = 10;
 
 scenario_n_files = {'SITE247J.01N', ...
@@ -12,12 +15,14 @@ scenario_o_files = {'SITE247J.01O',...
     'rinex_download\amc\amc2001a00.15o', ...
     'rinex_download\crao\crao001a00.15o'};
 gt_per_file_lla = ...
-    [56.997739, 9.993229, 48.8;
+    [57.015501, 9.987793 48.8; %[56.997739, 9.993229, 48.8;
     -19.0183060	47.2292117	1552.9923;
     38.8031250	-104.5245972	1911.3941;
     44.4132611	33.9909833	365.8];
 
-for file_idx = 1:size(gt_per_file_lla,1)
+N_files = size(gt_per_file_lla,1);
+for file_idx = 1:N_files
+    fprintf('file %d/%d\n', file_idx, N_files);
     % Read RINEX ephemerides file and convert to internal Matlab format
     rinexe(scenario_n_files{file_idx},'eph.dat');
     Eph = get_eph('eph.dat');
@@ -72,7 +77,7 @@ for file_idx = 1:size(gt_per_file_lla,1)
         obs1 = grabdata(fid1, NoSv1, NoObs_types1);
         i = fobs_typ(Obs_types1, OBS_TYPE);
         
-        tpos = zeros(5, N_trials);
+        tpos = zeros(5, N_trials); %state vectors for t trials (Error experiments)
         dgln_tpos = zeros(5, N_trials);
         
         for t = 1:N_trials
@@ -81,7 +86,6 @@ for file_idx = 1:size(gt_per_file_lla,1)
             loc_assist = assistance_ecef(t,:)';
             
             orig_PRs = obs1(:,i) / light_ms + rb; % observations Pseudoranges (milliseconds)
-            % inherent bias is 0.379229019830779 ms
 
             % Construct synthetic fractional PRs:
             ctn_Ns = floor(orig_PRs); % full ms
@@ -100,6 +104,9 @@ for file_idx = 1:size(gt_per_file_lla,1)
         Pos(q, 1:5, 1:N_trials) = tpos;
         PosDgln(q, 1:5, 1:N_trials) = dgln_tpos;
         q = q+1;
+        if mod(q,10) == 0
+            fprintf('epoch %d...\n', q);
+        end
     end
     q = q-1;
     fclose(fid1);
@@ -122,6 +129,7 @@ for file_idx = 1:size(gt_per_file_lla,1)
     legend('my' ,' digglen');
     xlabel('pos error [m]'); ylabel('pdf');
     title(sprintf('file %d - distribution of position errors', file_idx));
+    savefig(sprintf('results\\%s\\pos_pdf_file_%d.fig', tm, file_idx));
     
     %Assistance-Time Errors Distribution
     mtimes = Pos(:,5,:);
@@ -139,6 +147,7 @@ for file_idx = 1:size(gt_per_file_lla,1)
     legend('my' ,' digglen');
     xlabel('Assistance-Time Error [sec]'); ylabel('pdf');
     title(sprintf('file %d - distribution of assistance time errors', file_idx));
+    savefig(sprintf('results\\%s\\time_pdf_file_%d.fig', tm, file_idx));
     
 %     fprintf('My:\n');
 %     me = mean(Pos,2);
