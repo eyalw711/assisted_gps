@@ -105,9 +105,9 @@ for i = 1:noeph
    iodc = line(61:79);
    line = fgetl(fide);	    %
    tom(i) = str2num(line(4:22));
-   spare = line(23:41);
-   spare = line(42:60);
-   spare = line(61:79);
+%    spare = line(23:41);
+%    spare = line(42:60);
+%    spare = line(61:79);
 end
 status = fclose(fide);
 

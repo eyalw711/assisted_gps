@@ -1,0 +1,3 @@
+Data on all IGS stations: http://www.igs.org/network
+Download highrate data from: ftp://cddis.nasa.gov/gnss/data/highrate/
+Decompress the .d files using "C:\Users\Eyal\Documents\GitHub\assisted_gps\rinex_download\RNXCMP_4.0.7_Windows_bcc\bin\crx2rnx.exe" bin

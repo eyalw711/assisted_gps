@@ -19,7 +19,7 @@ pos = zeros(4,1);
 no_iterations = 6; 
 ps_corr = [];
 sat_pos = [];
-
+dzmag = [];
 for iter = 1:no_iterations
     A = [];
     omc = []; % observed minus computed observation
@@ -61,12 +61,14 @@ for iter = 1:no_iterations
     end % i
     x = A\omc;
     pos = pos+x;
+    dzmag = [dzmag norm(omc)];
     if iter == no_iterations, GDOP = sqrt(trace(inv(A'*A))); 
-        %% two lines that solve an exercise on computing tdop
+        % two lines that solve an exercise on computing tdop
         % invm = inv(A'*A);
         % tdop = sqrt(invm(4,4))
     end
 end % iter
 basic_obs = [sat_pos ps_corr];
+figure; plot(dzmag); xlabel('iterations'); ylabel('norm(dz)');
 
 %%%%%%%%%%%%%%%%%%%%%  recpo_ls.m  %%%%%%%%%%%%%%%%%%%%%

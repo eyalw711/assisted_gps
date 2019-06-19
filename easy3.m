@@ -33,6 +33,9 @@ for q = 1:20
     Pos = [Pos pos];
 end
 me = mean(Pos,2);
+computed_lla = ecef2lla(me(1:3)');
+fprintf('computed_lla: %f, %f\n', computed_lla(1), computed_lla(2));
+
 fprintf('\nMean Position as Computed From 20 Epochs:')
 fprintf('\n\nX: %12.3f  Y: %12.3f  Z: %12.3f', me(1,1), me(2,1), me(3,1))
 plot((Pos(1:3,:)-Pos(1:3,1)*ones(1,q))','linewidth',2)

@@ -1,4 +1,4 @@
-function [time, dt, sats, eof, datee] = fepoch_0(fid)
+function [time, dt, sats, eof] = fepoch_0(fid)
 % FEPOCH_0   Finds the next epoch in an opened RINEX file with
 %	          identification fid. From the epoch line is produced
 %	          time (in seconds of week), number of sv.s, and a mark
@@ -17,30 +17,39 @@ sats = [];
 NoSv = 0;
 eof = 0;
 
+linnum = 1;
+
 while 1
    lin = fgets(fid); % earlier fgetl
+   if lin == -1
+       eof = 1;
+       break;
+   end
+   
+   linnum = linnum + 1;
    answer = findstr(lin,'COMMENT');
    
-   if ~isempty(answer);
+   if ~isempty(answer) || isempty(deblank(lin))
       lin = fgetl(fid);
-   end;
-  
+      linnum = linnum + 1;
+   end
    
    if (feof(fid) == 1);
       eof = 1;
       break
    end;
+   
    if ((strcmp(lin(29),'0') == 0) & (size(deblank(lin),2) == 29))
       eof = 1; 
       break
    end; % We only want type 0 data
-   if ((strcmp(lin(2),'0') == 1)  &  (strcmp(lin(29),'0') == 1))      
+   if  (strcmp(lin(29),'0') == 1)     % ((strcmp(lin(2),'0') == 1)  & 
       ll = length(lin)-2;
       if ll > 60, ll = 60; end;
       linp = lin(1:ll);        
       %fprintf('%60s\n',linp);
-      [year, lin] = strtok(lin);
-      year;
+      [year_var, lin] = strtok(lin);
+      year_var;
       [month, lin] = strtok(lin);
       [day, lin] = strtok(lin);
       month;
@@ -53,7 +62,7 @@ while 1
       %second
       [OK_flag, lin] = strtok(lin);
       h = str2num(hour)+str2num(minute)/60+str2num(second)/3600;
-      jd = julday(str2num(year)+2000, str2num(month), str2num(day), h);
+      jd = julday(str2num(year_var)+2000, str2num(month), str2num(day), h);
       [week, sec_of_week] = gps_time(jd);
       jd;
       time = sec_of_week;
@@ -74,6 +83,6 @@ while 1
    end
    
 end; 
-datee=[str2num(year) str2num(month) str2num(day) str2num(hour) str2num(minute) str2num(second)];
+% datee=[str2num(year_var) str2num(month) str2num(day) str2num(hour) str2num(minute) str2num(second)];
 
 %%%%%%%% end fepoch_0.m %%%%%%%%%
