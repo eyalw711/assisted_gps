@@ -1,4 +1,4 @@
-function [pos, El, GDOP, basic_obs] = recpo_ls(obs,sats,time,Eph)
+function [pos, El, GDOP, basic_obs, resid_mag] = recpo_ls(obs,sats,time,Eph)
 % RECPO_LS Computation of receiver position from pseudoranges
 %          using ordinary least-squares principle
 
@@ -69,6 +69,7 @@ for iter = 1:no_iterations
     end
 end % iter
 basic_obs = [sat_pos ps_corr];
-figure; plot(dzmag); xlabel('iterations'); ylabel('norm(dz)');
+resid_mag = norm(omc);
+% figure; plot(dzmag); xlabel('iterations'); ylabel('norm(dz)');
 
 %%%%%%%%%%%%%%%%%%%%%  recpo_ls.m  %%%%%%%%%%%%%%%%%%%%%

@@ -1,33 +1,38 @@
 %clear all;
-% rng(777);
+rng(777);
 % file_idx = 2;
-tm = datestr(now,'dd_mm_yyyy__HH_MM_SS');
-mkdir('results', tm);
+SAVE_FIGS = 0;
 
-N_trials = 10;
+tm = datestr(now,'dd_mm_yyyy__HH_MM_SS');
+if SAVE_FIGS mkdir('results', tm), end;
+
+N_trials = 1;
 
 scenario_n_files = {'SITE247J.01N', ...
     'rinex_download\abpo_1jan2015_0000\abpo001a00.15n',...
     'rinex_download\amc\amc2001a00.15n', ...
-    'rinex_download\crao\crao001a00.15n'};
+    'rinex_download\crao\crao001a00.15n',...
+    'rinex_download\fair\fair001a00.15n'};
 scenario_o_files = {'SITE247J.01O',...
     'rinex_download\abpo_1jan2015_0000\abpo001a00.15o',...
     'rinex_download\amc\amc2001a00.15o', ...
-    'rinex_download\crao\crao001a00.15o'};
+    'rinex_download\crao\crao001a00.15o',...
+    'rinex_download\fair\fair001a00.15o'};
 gt_per_file_lla = ...
-    [57.015501, 9.987793 48.8; %[56.997739, 9.993229, 48.8;
-    -19.0183060	47.2292117	1552.9923;
-    38.8031250	-104.5245972	1911.3941;
-    44.4132611	33.9909833	365.8];
+    [57.015501  9.987793      48.8;        %[56.997739, 9.993229, 48.8;
+    -19.0183060	47.2292117	  1552.9923;
+    38.8031250	-104.5245972  1911.3941;
+    44.4132611	33.9909833	  365.8;
+    64.9779983	-147.4992396  319.1771];
 
 N_files = size(gt_per_file_lla,1);
-for file_idx = 1:N_files
+for file_idx = 1%1:N_files
     fprintf('file %d/%d\n', file_idx, N_files);
     % Read RINEX ephemerides file and convert to internal Matlab format
     rinexe(scenario_n_files{file_idx},'eph.dat');
     Eph = get_eph('eph.dat');
     
-    OBS_TYPE = 'C1'; % Pseudorange using C/A code on L1
+    OBS_TYPE = 'P1'; % Pseudorange using C/A code on L1
     light_ms = 299792458 * 0.001; % meters
     TOW_MAX = 604800;
     
@@ -39,7 +44,7 @@ for file_idx = 1:N_files
     gt_lla = gt_per_file_lla(file_idx, :);
     gt_ecef = lla2ecef(gt_lla);
     
-    % add error:
+    % add position error:
     az = rand(N_trials,1)*360;
     dist = rand(N_trials,1)*3000; %meters
     
@@ -58,11 +63,13 @@ for file_idx = 1:N_files
     NoObs_types1 = size(Obs_types1,2)/2;
     Pos = [];
     PosDgln = [];
+    PosMS_UPGRD = [];
     
     random_bias = (2*rand(N_trials,1)-1)*1000; %in ms
     
     % Generate assistance time:
     two_sec_worth_of_ms = 2*1000;
+    
     time_error_ms = randi([-two_sec_worth_of_ms, two_sec_worth_of_ms], N_trials, 1);
     
     q = 1; eof1 = 0;
@@ -79,6 +86,7 @@ for file_idx = 1:N_files
         
         tpos = zeros(5, N_trials); %state vectors for t trials (Error experiments)
         dgln_tpos = zeros(5, N_trials);
+        tms_positions = zeros(3, N_trials);
         
         for t = 1:N_trials
             rb = random_bias(t);
@@ -93,8 +101,9 @@ for file_idx = 1:N_files
 
             TOW_assist_ms = floor(time1*1000 + te_ms); % some integer millisecond
 
-            pos = my_recPosCoarseTime_ls(obs_frac_PRs, sats1, Eph, TOW_assist_ms, loc_assist, 0);
+            pos = my_recPosCoarseTime_ls(obs_frac_PRs, sats1, Eph, TOW_assist_ms, loc_assist, 0, 0);
             tpos(:, t) = pos;
+%             tms_positions(:, t) = int_ms_pos;
 %             Pos = [Pos pos];
 
             pos = my_recPosCoarseTime_ls(obs_frac_PRs, sats1, Eph, TOW_assist_ms, loc_assist, 1);
@@ -103,6 +112,8 @@ for file_idx = 1:N_files
         end
         Pos(q, 1:5, 1:N_trials) = tpos;
         PosDgln(q, 1:5, 1:N_trials) = dgln_tpos;
+%         PosMS_UPGRD(q, 1:3, 1:N_trials) = tms_positions;
+        
         q = q+1;
         if mod(q,10) == 0
             fprintf('epoch %d...\n', q);
@@ -129,7 +140,7 @@ for file_idx = 1:N_files
     legend('my' ,' digglen');
     xlabel('pos error [m]'); ylabel('pdf');
     title(sprintf('file %d - distribution of position errors', file_idx));
-    savefig(sprintf('results\\%s\\pos_pdf_file_%d.fig', tm, file_idx));
+    if SAVE_FIGS savefig(sprintf('results\\%s\\pos_pdf_file_%d.fig', tm, file_idx)), end;
     
     %Assistance-Time Errors Distribution
     mtimes = Pos(:,5,:);
@@ -147,7 +158,16 @@ for file_idx = 1:N_files
     legend('my' ,' digglen');
     xlabel('Assistance-Time Error [sec]'); ylabel('pdf');
     title(sprintf('file %d - distribution of assistance time errors', file_idx));
-    savefig(sprintf('results\\%s\\time_pdf_file_%d.fig', tm, file_idx));
+    if SAVE_FIGS savefig(sprintf('results\\%s\\time_pdf_file_%d.fig', tm, file_idx)), end;
+    
+%     %improved int ms version:
+%     locms_errs = sqrt(sum((PosMS_UPGRD' - repmat(gt_ecef', 1, q*N_trials)).^2, 1));
+%     [f_mslocerr, x_mslocerr] = ksdensity(locms_errs);
+%     figure;
+%     plot(x_mslocerr, f_mslocerr, x_mlocs_errs, f_mlocs_errs);
+%     legend('int ms' ,'LS ms');
+%     xlabel('pos err [m]'); ylabel('pdf');
+%     title(sprintf('file %d - int ms - distribution of position errors', file_idx));
     
 %     fprintf('My:\n');
 %     me = mean(Pos,2);

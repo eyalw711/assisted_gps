@@ -1,5 +1,5 @@
-function state = my_recPosCoarseTime_ls(... % old return values are [pos, El, GDOP, basic_obs]
-    obs, sats, Eph, TOW_assist_ms, rec_loc_assist, dgln)
+function [state, int_ms_pos] = my_recPosCoarseTime_ls(... % old return values are [pos, El, GDOP, basic_obs]
+    obs, sats, Eph, TOW_assist_ms, rec_loc_assist, is_dgln, is_int_ms)
 % MY_RECPOSCOARSETIME_LS Computation of receiver position from fractional
 %          pseudoranges using coarse time navigation and least squares
 
@@ -43,16 +43,16 @@ approx_distances = sqrt(sum((repmat(rec_loc_assist, 1, numSVs) - satPos_at_T_til
 
 % assign N numbers:
 [Ns, N0_inx] = my_assignNs(sats, svInxListByDistance, obs, Eph, TOW_assist ,rec_loc_assist, approx_distances);
+Ns = Ns + 711;
 
 % now find K numbers:
 Ks = arrayfun(@(x) x - Ns(N0_inx), Ns);
-if dgln
+if exist('is_dgln', 'var') && is_dgln 
     Ks = zeros(size(Ks));
 end
 
 fullPRs = Ns + obs; % full pseudoranges reconstruction in ms
 fullPRs = fullPRs * (v_light * 1e-3); % in meters
-dzmag = [];
 
 for iter = 1:no_iterations
     H = [];
@@ -112,8 +112,7 @@ for iter = 1:no_iterations
         sat_vel_mps = Rot_X_fut - Rot_X;
         
         e_k = (Rot_X - (Et+Kk*1e-3)*sat_vel_mps - state(1:3));
-        e_k = e_k/norm(e_k);
-%         e_k = e_k / fullPRs(k);
+        e_k = e_k/norm(e_k);   %    e_k = e_k / fullPRs(k);
         
         v_k = -sat_vel_mps'*e_k; %relative speed in mps
         H_row = [-e_k' 1 v_k];
@@ -122,13 +121,39 @@ for iter = 1:no_iterations
     x = H\delta_z;
     state = state+x;
 
-    dzmag = [dzmag norm(delta_z)];
-    if iter == no_iterations, GDOP = sqrt(trace(inv(H'*H))); 
-        % two lines that solve an exercise on computing tdop
-        % invm = inv(A'*A);
-        % tdop = sqrt(invm(4,4))
-    end
+%     dzmag = [dzmag norm(delta_z)];
+%     if iter == no_iterations,
+%         % GDOP = sqrt(trace(inv(H'*H))); 
+%         % two lines that solve an exercise on computing tdop
+%         % invm = inv(A'*A);
+%         % tdop = sqrt(invm(4,4))
+%     end
 end % iter
-basic_obs = [sat_pos ps_corr];
+
+if exist('is_int_ms', 'var') && is_int_ms
+    %construct time is seconds!
+    assistance_time_err = state(5);
+    concluded_time_sat0 = TOW_assist - assistance_time_err;
+    sat0_hypotheses_sec = ((round(concluded_time_sat0*1000)-20):1:(round(concluded_time_sat0*1000)+20)) * 1e-3;
+    rec_time_hypotheses = sat0_hypotheses_sec + fullPRs(N0_inx)/ v_light;
+    int_ms_positions = zeros(4, length(rec_time_hypotheses));
+    int_ms_resid_mags = zeros(size(rec_time_hypotheses));
+    
+    for iter = 1:length(rec_time_hypotheses)
+        time = rec_time_hypotheses(iter);
+        [pos, ~, ~, ~ , resid_mag] = recpo_ls(fullPRs,sats,time,Eph);
+        int_ms_positions(:, iter) = pos;
+        int_ms_resid_mags(iter) = resid_mag;
+    end
+    
+    % choose least residual:
+    [~, Imin] = min(int_ms_resid_mags);
+    int_ms_pos = int_ms_positions(1:3, Imin);
+    
+    
+end
+
+% basic_obs = [sat_pos ps_corr];
 % figure; plot(dzmag); xlabel('iterations'); ylabel('norm(dz)');
 %%%%%%%%%%%%%%%%%%%%%  recpo_ls.m  %%%%%%%%%%%%%%%%%%%%%
+end
