@@ -136,6 +136,6 @@ eph(21,:) = toe;
 
 fidu = fopen(outputfile,'w');
 count = fwrite(fidu,[eph],'double');
-fclose all
+fclose all;
 %%%%%%%%% end rinexe.m %%%%%%%%%
 
