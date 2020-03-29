@@ -24,7 +24,7 @@ clear col_Eph; %shouldn't use it anymore after sorting
 % preliminary guess for receiver position, common bias, and assistance
 % error
 state = [rec_loc_assist; 0; 0]; % [x y z b et]'
-no_iterations = 1; %20; 
+no_iterations = 20; 
 ps_corr = [];
 sat_pos = [];
 
@@ -92,7 +92,7 @@ for iter = 1:no_iterations
             [az,el,dist] = topocent(state(1:3,:),Rot_X-state(1:3,:));                                                            
             if iter == no_iterations, El(k) = el; end
             trop = tropo(sin(el*dtr),0.0,1013.0,293.0,50.0,...
-                0.0,0.0,0.0);    
+                0.0,0.0,0.0);
         end
         
         % subtraction of pos(4) corrects for receiver clock offset and

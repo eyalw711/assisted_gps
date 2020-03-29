@@ -24,7 +24,9 @@ results = struct();
 
 % unknown
 clockBiasMag = 5; %500
-clock_bias = clockBiasMag*(rand-0.5);
+clock_bias = clockBiasMag*(rand-0.5); %in seconds
+% to get to same simestamp in gps_ctn, add clock_bias to gps_time
+axis_beta = mod(clock_bias, tcode);
 
 iter = 1;
 while 1
@@ -34,13 +36,16 @@ while 1
     end
     fprintf('%d: at time %f: %d observations\n', iter, obs_gps.time, numel(obs_gps.obs));
     obs_ctn = obs_gps;
-    obs_ctn.obs = mod((obs_gps.obs)/(c*tcode), 1);   % code phase obs
-    obs_ctn.time = obs_gps.time + clock_bias;
-    
+    obs_ctn.time = obs_gps.time + clock_bias; % (in gpstime)
+    gps_codephase = mod((obs_gps.obs)/(c*tcode), 1);   % code phase obs
+    obs_ctn.obs = mod(gps_codephase - axis_beta/tcode, 1); %IMPORTANT MAYBE DANGEROUS
+%     obs_ctn.obs = mod((obs_gps.obs)/(c*tcode), 1);   % code phase obs
+
     % knowns / observations
     N_sats = numel(obs_ctn.sats);
-    t = obs_ctn.time + tcode*obs_ctn.obs;       % arrival times
-    tDhat = t - d_coarse - gs.bBar;             % estimated departure times
+%     t = obs_ctn.time + tcode*obs_ctn.obs;                         % arrival times in ctn_time
+    t = obs_gps.time - clock_bias + axis_beta + obs_ctn.obs*tcode;  % presumed arrival times
+    tDhat = t - d_coarse - gs.bBar;                                 % estimated departure times
     
     %%% van diggelen's method %%%
     %%% shadowing      method %%%
