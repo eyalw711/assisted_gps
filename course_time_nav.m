@@ -10,7 +10,8 @@ c = physconst('LightSpeed');
 d_coarse = 76.5e-3;
 sigmaCode = 10e-9;
 clockBiasMag = 60; % seconds
-posAssistErrorMag = 3000;
+posAssistErrorMag = 5000;
+niter = 6;
 
 tm = datestr(now,'dd_mm_yyyy__HH_MM_SS');
 if SAVE_FIGS mkdir('results', tm), end;
@@ -108,12 +109,21 @@ for file_idx = 5%1:N_files
         presumed_time = ceil((gps_time + ctn_clock_bias)/tcode)*tcode;
         presumed_time_ms = presumed_time / tcode;
         
-        [trypos, H, omc, reconsNs] = my_recPosCoarseTime_ls(ctn_codephases, sats1, Eph, ...
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Diggelen by the book + my improvement    %
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        
+        [ellBar_diggelenBook, H, omc, reconsNs, pos_seq] = my_recPosCoarseTime_ls(ctn_codephases, sats1, Eph, ...
             presumed_time_ms, ellBar, 0, 0);
         
-        lastAlgoError = norm(gt_ecef - trypos(1:3))
+        refAlgoError = norm(gt_ecef - ellBar_diggelenBook(1:3))
         
-        % our new method
+        ellErrs_REF = sqrt(sum((pos_seq - gt_ecef).^2, 1))';
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %   our Diggelen Approach  %
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        
         N_sats = numel(sats1);
         presumed_arrival_times = presumed_time + ctn_codephases*tcode;
         tDhat = presumed_arrival_times - d_coarse - bBar;
@@ -121,15 +131,16 @@ for file_idx = 5%1:N_files
         [distances, J] = model(ellBar, tDhat, sats1, Eph);
         [~,j] = min(abs(J(:,4)));
         
-        correction_times = zeros(N_sats, 1);
-        delta_t = zeros(N_sats, 1);
-        for i=1:N_sats
-            eph_col_inx = find_eph( Eph, sats1(i), tDhat(i));
-            eph_col = Eph(:, eph_col_inx);
-            [tx_GPS, tcorr] = tx_RAW2tx_GPS(tDhat(i), eph_col);
-            correction_times(i) = tcorr;
-            delta_t(i) = Eph(19, eph_col_inx);
-        end
+%         correction_times = zeros(N_sats, 1);
+%         delta_t = zeros(N_sats, 1);
+%         for i=1:N_sats
+%             eph_col_inx = find_eph( Eph, sats1(i), tDhat(i));
+%             eph_col = Eph(:, eph_col_inx);
+%             [tx_GPS, tcorr] = tx_RAW2tx_GPS(tDhat(i), eph_col);
+%             correction_times(i) = tcorr;
+%             delta_t(i) = Eph(19, eph_col_inx);
+%         end
+        [correction_times, delta_t] = get_correction_times(tDhat, sats1, Eph);
         
         nu = zeros(N_sats, 1);
         nu(j) = ceil( (distances(j)/c - ctn_codephases(j)*tcode - delta_t(j)) / tcode);
@@ -155,7 +166,9 @@ for file_idx = 5%1:N_files
         
         %%% IMPROVE
         betaHat2 = betaHat;
-        niter = 3;
+        
+        ellErrs_ODA = zeros(niter, 1);
+        
         for it = 1:niter
             [distances, ~, satspos] = model(ellHat, tDhat, sats1, Eph); % just for improving transmit times
             
@@ -166,6 +179,7 @@ for file_idx = 5%1:N_files
             trops = arrayfun(@(x) tropo(sin(x*pi/180),0.0,1013.0,293.0,50.0, 0.0,0.0,0.0), els);
             
             tDhat = presumed_arrival_times - distances/c - bHat - trops/c;   % improved transmit times
+            correction_times = get_correction_times(tDhat, sats1, Eph);
             [distances, J] = model(ellHat, tDhat, sats1, Eph);
             delta = [ J ones(N_sats,1) ] \ ((nu+ctn_codephases)*tcode*c - (distances - correction_times*c + trops));
             
@@ -182,6 +196,8 @@ for file_idx = 5%1:N_files
             locationErr = norm(ellErr);
             clockErr    = bErr;
             BetaErr = (betaHat - axis_beta_rev*tcode)/tcode;
+            
+            ellErrs_ODA(it) = locationErr;
         end
         fprintf('Our Diggelen - iter %d: locErr: %.5f resNorm: %.5f, clockErr: %e, betaErr: %e\n', ...
             it, locationErr, resnorm, clockErr, BetaErr);
@@ -194,8 +210,11 @@ for file_idx = 5%1:N_files
         %%%%%%%%%%%%%%%%%%%%%%%%%
         
         disp('ILS approach');
+        bHat = bBar;
         
         tDhat = presumed_arrival_times - d_coarse - bBar;
+        correction_times = get_correction_times(tDhat, sats1, Eph);
+        
         [distances, J] = model(ellBar, tDhat, sats1, Eph);
         
         A = [ J/c + [zeros(N_sats,d) ones(N_sats,1) ] eye(N_sats) ; J/c zeros(N_sats,N_sats) ];
@@ -240,37 +259,49 @@ for file_idx = 5%1:N_files
         %results.maxIntegerErr = max(abs(Nhat - (n(2:m)-n(1))))
         
         %         delta = (W(1:N_sats,1:N_sats)*A(1:N_sats,1:d+1)) \ (W(1:N_sats,1:N_sats) * (ctn_codephases*tcode + correction_times - distances/c - bBar + tcode*nhat));
-        niter = 3;
+        ellHat_ILS = ellBar;
+        ellErrs_ILS = zeros(niter, 1);
+        
         for it = 1:niter
-            [distances, ~, satspos] = model(ellHat, tDhat, sats1, Eph); % just for improving transmit times
+            [distances, ~, satspos] = model(ellHat_ILS, tDhat, sats1, Eph); % just for improving transmit times
             
             els = zeros(N_sats, 1);
             for s = 1:N_sats
-                [~, els(s), ~] = topocent(ellBar, satspos(:,s)-ellBar);
+                [~, els(s), ~] = topocent(ellHat_ILS, satspos(:,s)-ellBar);
             end
             trops = arrayfun(@(x) tropo(sin(x*pi/180),0.0,1013.0,293.0,50.0, 0.0,0.0,0.0), els);
             
             tDhat = presumed_arrival_times - distances/c - bHat - trops/c;   % improved transmit times
-            [distances, J] = model(ellHat, tDhat, sats1, Eph);
+            correction_times = get_correction_times(tDhat, sats1, Eph);
+            
+            [distances, J] = model(ellHat_ILS, tDhat, sats1, Eph);
             delta = [ J ones(N_sats,1) ] \ ((nhat+ctn_codephases)*tcode*c - (distances - correction_times*c + trops));
             
-            ellHat = ellHat + delta(1:d,1);
+            ellHat_ILS = ellHat_ILS + delta(1:d,1);
             
             bHat = bHat + delta(d+1);
             betaHat = delta(d+2)/c;
             
-            ellErr = ellHat - gt_ecef;
+            ellErr = ellHat_ILS - gt_ecef;
             bErr = bHat - ctn_clock_bias;
             
-            distances = model(ellHat, tDhat, sats1, Eph); % just for improving transmit times
+            distances = model(ellHat_ILS, tDhat, sats1, Eph); % just for improving transmit times
             resnorm   = norm( ((nu + ctn_codephases)*tcode + correction_times - betaHat)*c - distances - trops);
             results.ILS_locationErr = norm(ellErr);
             results.ILS_clockErr    = bErr;
             BetaErr = (betaHat - axis_beta_rev*tcode)/tcode;
+            
+            ellErrs_ILS(it) = results.ILS_locationErr;
         end
         
         fprintf('ILS: resNorm: %.5f locErr: %.5f, clockErr: %e, betaErr: %e\n', ...
             nan, results.ILS_locationErr, results.ILS_clockErr, BetaErr);
+        
+        figure;
+        plot((1:niter)', [ellErrs_ODA ellErrs_ILS ellErrs_REF]);
+        title('approaches convergence');
+        legend('our diggelen approach', 'ILS', 'ref');
+        xlabel('iteration'); ylabel('3d error magnitude');
         
         if 0 %%%% code I dodn't port yet
             %residual = W(1:m,1:m) * (A(1:m,1:d+1)*delta - (phi*tcode - distances/c - bBar + tcode*nhat));
@@ -443,6 +474,22 @@ for r = 1:N_sats
     J(r, 4)   = e_r * sat_vel_approx;
 end
 end
+
+
+function [correction_times, delta_t] = get_correction_times(tDhat, sats, Eph)
+N_sats = numel(sats);
+correction_times = zeros(N_sats, 1);
+delta_t = zeros(N_sats, 1);
+for i=1:N_sats
+    eph_col_inx = find_eph( Eph, sats(i), tDhat(i));
+    eph_col = Eph(:, eph_col_inx);
+    [~, tcorr] = tx_RAW2tx_GPS(tDhat(i), eph_col);
+    correction_times(i) = tcorr;
+    delta_t(i) = Eph(19, eph_col_inx);
+end
+end
+
+
 
 
 

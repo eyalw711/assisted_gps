@@ -1,4 +1,4 @@
-function [state, H, omc, reconsNs] = my_recPosCoarseTime_ls(... % old return values are [pos, El, GDOP, basic_obs]
+function [state, H, omc, reconsNs, pos_seq] = my_recPosCoarseTime_ls(... % old return values are [pos, El, GDOP, basic_obs]
     obs, sats, Eph, TOW_assist_ms, rec_loc_assist, is_dgln, is_int_ms)
 % MY_RECPOSCOARSETIME_LS Computation of receiver position from fractional
 %          pseudoranges using coarse time navigation and least squares
@@ -24,7 +24,7 @@ clear col_Eph; %shouldn't use it anymore after sorting
 % preliminary guess for receiver position, common bias, and assistance
 % error
 state = [rec_loc_assist; 0; 0]; % [x y z b et]'
-no_iterations = 20; 
+no_iterations = 6; 
 ps_corr = [];
 sat_pos = [];
 
@@ -122,6 +122,7 @@ for iter = 1:no_iterations
     x = H\delta_z;
     state = state+x;
     omc = delta_z;
+    pos_seq(1:3, iter) = state(1:3);
 %     dzmag = [dzmag norm(delta_z)];
 %     if iter == no_iterations,
 %         % GDOP = sqrt(trace(inv(H'*H))); 
