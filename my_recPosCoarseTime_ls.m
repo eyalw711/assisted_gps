@@ -6,7 +6,7 @@ function [state, H, omc, reconsNs, pos_seq] = my_recPosCoarseTime_ls(... % old r
 % obs (Observations) are the fractional PRs (sub millisecond)
 % sats are the SV numbers associated with each observation
 % Eph is a table of ephemerides, each column associated with a satellite
-
+no_iterations = 6; 
 v_light = 299792458;
 dtr = pi/180;
 numSVs = size(obs,1);  % number of svs
@@ -24,7 +24,6 @@ clear col_Eph; %shouldn't use it anymore after sorting
 % preliminary guess for receiver position, common bias, and assistance
 % error
 state = [rec_loc_assist; 0; 0]; % [x y z b et]'
-no_iterations = 6; 
 ps_corr = [];
 sat_pos = [];
 

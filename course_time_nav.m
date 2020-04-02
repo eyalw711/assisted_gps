@@ -1,4 +1,6 @@
-clear all;
+clear all; close all;
+clc;
+
 % rng(777);
 % file_idx = 2;
 SAVE_FIGS = 0;
@@ -131,15 +133,6 @@ for file_idx = 5%1:N_files
         [distances, J] = model(ellBar, tDhat, sats1, Eph);
         [~,j] = min(abs(J(:,4)));
         
-%         correction_times = zeros(N_sats, 1);
-%         delta_t = zeros(N_sats, 1);
-%         for i=1:N_sats
-%             eph_col_inx = find_eph( Eph, sats1(i), tDhat(i));
-%             eph_col = Eph(:, eph_col_inx);
-%             [tx_GPS, tcorr] = tx_RAW2tx_GPS(tDhat(i), eph_col);
-%             correction_times(i) = tcorr;
-%             delta_t(i) = Eph(19, eph_col_inx);
-%         end
         [correction_times, delta_t] = get_correction_times(tDhat, sats1, Eph);
         
         nu = zeros(N_sats, 1);
@@ -172,16 +165,21 @@ for file_idx = 5%1:N_files
         for it = 1:niter
             [distances, ~, satspos] = model(ellHat, tDhat, sats1, Eph); % just for improving transmit times
             
-            els = zeros(N_sats, 1);
-            for s = 1:N_sats
-                [~, els(s), ~] = topocent(ellBar, satspos(:,s)-ellBar);
-            end
-            trops = arrayfun(@(x) tropo(sin(x*pi/180),0.0,1013.0,293.0,50.0, 0.0,0.0,0.0), els);
+            els = satellite_eleveations(ellBar, satspos);
+            trops = tropospheric_model(els);
             
             tDhat = presumed_arrival_times - distances/c - bHat - trops/c;   % improved transmit times
-            correction_times = get_correction_times(tDhat, sats1, Eph);
-            [distances, J] = model(ellHat, tDhat, sats1, Eph);
-            delta = [ J ones(N_sats,1) ] \ ((nu+ctn_codephases)*tcode*c - (distances - correction_times*c + trops));
+            correction_times = get_correction_times(tDhat, sats1, Eph);      % improved correction times
+            
+            [distances, J, satspos] = model(ellHat, tDhat, sats1, Eph);      % improved Jacobian
+            
+            satspos_rot = zeros(size(satspos));
+            for s = 1:N_sats
+                satspos_rot(:,s) = e_r_corr(distances(s)/c, satspos(:,s));
+            end
+            distances_rot = vecnorm(satspos_rot - ellHat)';                  % distance from rotated positions of satellites
+            
+            delta = [ J ones(N_sats,1) ] \ ((nu+ctn_codephases)*tcode*c - (distances_rot - correction_times*c + trops));
             
             ellHat = ellHat + delta(1:d,1);
             
@@ -202,7 +200,8 @@ for file_idx = 5%1:N_files
         fprintf('Our Diggelen - iter %d: locErr: %.5f resNorm: %.5f, clockErr: %e, betaErr: %e\n', ...
             it, locationErr, resnorm, clockErr, BetaErr);
         
-        origDiggNs_vs_ourDiggNs = [reconsNs-min(reconsNs) nu-min(nu)]'
+        %         origDiggNs_vs_ourDiggNs = [reconsNs-min(reconsNs) nu-min(nu)]'
+        origDiggNs_vs_ourDiggNs = [reconsNs nu]'
         
         
         %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -265,17 +264,20 @@ for file_idx = 5%1:N_files
         for it = 1:niter
             [distances, ~, satspos] = model(ellHat_ILS, tDhat, sats1, Eph); % just for improving transmit times
             
-            els = zeros(N_sats, 1);
-            for s = 1:N_sats
-                [~, els(s), ~] = topocent(ellHat_ILS, satspos(:,s)-ellBar);
-            end
-            trops = arrayfun(@(x) tropo(sin(x*pi/180),0.0,1013.0,293.0,50.0, 0.0,0.0,0.0), els);
+            els = satellite_eleveations(ellHat_ILS, satspos);
+            trops = tropospheric_model(els);
             
             tDhat = presumed_arrival_times - distances/c - bHat - trops/c;   % improved transmit times
-            correction_times = get_correction_times(tDhat, sats1, Eph);
+            correction_times = get_correction_times(tDhat, sats1, Eph);      % improved correction times
             
-            [distances, J] = model(ellHat_ILS, tDhat, sats1, Eph);
-            delta = [ J ones(N_sats,1) ] \ ((nhat+ctn_codephases)*tcode*c - (distances - correction_times*c + trops));
+            [distances, J, satspos] = model(ellHat_ILS, tDhat, sats1, Eph);           % improved Jacobian
+            satspos_rot = zeros(size(satspos));
+            for s = 1:N_sats
+                satspos_rot(:,s) = e_r_corr(distances(s)/c, satspos(:,s));
+            end
+            distances_rot = vecnorm(satspos_rot - ellHat_ILS)';                  % distance from rotated positions of satellites
+            
+            delta = [ J ones(N_sats,1) ] \ ((nhat+ctn_codephases)*tcode*c - (distances_rot - correction_times*c + trops));
             
             ellHat_ILS = ellHat_ILS + delta(1:d,1);
             
@@ -489,6 +491,19 @@ for i=1:N_sats
 end
 end
 
+function elevs = satellite_eleveations(ellbar, satspos)
+N_sats = size(satspos, 2);
+elevs = zeros(N_sats, 1);
+for s = 1:N_sats
+    [~, elevs(s), ~] = topocent(ellbar, satspos(:,s)-ellbar);
+end
+end
+
+
+function trops = tropospheric_model(els)
+% returns the tropospheric delay model in meters
+trops = arrayfun(@(x) tropo(sin(x*pi/180),0.0,1013.0,293.0,50.0, 0.0,0.0,0.0), els);
+end
 
 
 
