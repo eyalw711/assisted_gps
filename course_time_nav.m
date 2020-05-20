@@ -18,7 +18,7 @@ light_ms = c * 0.001; % meters
 TOW_MAX = 604800;
 d_coarse = 76.5e-3;
 sigmaCode = 10e-9;
-clockBiasMags = 300; % seconds
+clockBiasMags = 120; % seconds
 posAssistErrorMags = 0:2000:300000; % meters
 niter = 6;
 n_epochs = 20;
@@ -64,7 +64,7 @@ for i_cbm = 1:numel(clockBiasMags)
         
         N_trials = 1;
         
-        for file_idx = 5%1:N_files
+        for file_idx = 3%1:N_files
             fprintf('file %d/%d\n', file_idx, N_files);
             
             % Read RINEX ephemerides file and convert to internal Matlab format
